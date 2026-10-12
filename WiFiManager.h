@@ -548,6 +548,7 @@ class WiFiManager
     // add or update a network (matched by ssid), false if list is full or invalid
     // shows as unverified until it connects once
     bool          addWiFiCredential(const char* ssid, const char* pass, bool hidden = false);
+    // a connect round in progress (beginMultiWiFi, roaming) starts over
     bool          removeWiFiCredential(const char* ssid);
     void          clearWiFiCredentials();
     uint8_t       getWiFiCredentialCount();

@@ -4718,12 +4718,18 @@ bool WiFiManager::addWiFiCredential(const char* ssid, const char* pass, bool hid
 
 bool WiFiManager::removeWiFiCredential(const char* ssid){
   mwLoad();
-  if(!_mwList.remove(_mwList.find(ssid))) return false;
+  int i = _mwList.find(ssid);
+  if(i < 0) return false;
+  // a round in progress holds indexes into the list, start it over
+  bool restart = _mwState != MW_IDLE;
+  mwAbort();
+  _mwList.remove(i);
   #ifdef WM_DEBUG_LEVEL
   DEBUG_WM(F("[MW] removed"), ssid);
   #endif
   mwStore();
   mwSyncSdk();
+  if(restart) beginMultiWiFi();
   return true;
 }
 
