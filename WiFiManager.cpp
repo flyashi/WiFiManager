@@ -4365,6 +4365,22 @@ void WiFiManager::mwAttempt(int idx, const WiFiManagerCandidate* c){
     delay(200);
   }
   _mwStart = millis();
+  // begin() does not reset the status, it keeps the last attempt's result until the next event
+  _mwStartSt = WiFi.status();
+}
+
+// the attempt found no access point: after 3s (a blind probe can miss one), unless
+// that status is left over from the attempt before, then it counts after 8s
+bool WiFiManager::mwNoAp(uint8_t st, unsigned long now){
+  unsigned long t = now - _mwStart;
+  return st == WL_NO_SSID_AVAIL && t > (st == _mwStartSt ? 8000 : 3000);
+}
+
+// the attempt is over without a connection: rejected (also only once not left over),
+// no access point, or timeout
+bool WiFiManager::mwFailed(uint8_t st, unsigned long now, uint32_t timeout){
+  unsigned long t = now - _mwStart;
+  return (st == WL_CONNECT_FAILED && (st != _mwStartSt || t > 8000)) || mwNoAp(st, now) || t > timeout;
 }
 
 bool WiFiManager::mwScanStart(){
@@ -4536,12 +4552,12 @@ bool WiFiManager::mwLoop(){
         mwFinish(true);
         return false;
       }
-      if(st == WL_NO_SSID_AVAIL && now - _mwStart > 3000 && !_mwRetried){
+      if(mwNoAp(st, now) && !_mwRetried){
         _mwRetried = true; // blind probe can miss an ap, once more
         mwAttempt(_mwFastIdx, NULL);
         return true;
       }
-      if(st == WL_CONNECT_FAILED || (st == WL_NO_SSID_AVAIL && now - _mwStart > 3000) || now - _mwStart > _mwFastTimeout){
+      if(mwFailed(st, now, _mwFastTimeout)){
         #ifdef WM_DEBUG_LEVEL
         DEBUG_WM(WM_DEBUG_VERBOSE,F("[MW] last good failed:"),getWLStatusString(st));
         #endif
@@ -4552,10 +4568,18 @@ bool WiFiManager::mwLoop(){
       return true;
 
     case MW_SCAN:
-      if(!_mwStart){
-        if(!mwAllowed()) return true;
-        WiFi_Disconnect(); // cannot scan while connecting
-        if(!mwScanStart()){
+      if(!_mwStart || _mwScanFails){
+        if(!_mwStart){
+          if(!mwAllowed()) return true;
+          WiFi_Disconnect(); // cannot scan while connecting
+          _mwScanFails = 0;
+        }
+        else if(now - _mwStart < 500) return true;
+        // a start can fail while the driver is still busy (eg. finishing a connect attempt), try a few times
+        if(mwScanStart()) _mwScanFails = 0;
+        else if(++_mwScanFails < 6) return true;
+        else {
+          _mwScanFails = 0;
           #ifdef WM_DEBUG_LEVEL
           DEBUG_WM(WM_DEBUG_ERROR,F("[ERROR] [MW] scan failed"));
           #endif
@@ -4593,12 +4617,12 @@ bool WiFiManager::mwLoop(){
         mwFinish(true);
         return false;
       }
-      if(st == WL_NO_SSID_AVAIL && now - _mwStart > 3000 && !_mwRetried && !_mwCands[_mwCand].hasBssid){
+      if(mwNoAp(st, now) && !_mwRetried && !_mwCands[_mwCand].hasBssid){
         _mwRetried = true; // blind probe (hidden) can miss an ap, once more
         mwAttempt(_mwTarget, &_mwCands[_mwCand]);
         return true;
       }
-      if(st == WL_CONNECT_FAILED || (st == WL_NO_SSID_AVAIL && now - _mwStart > 3000) || now - _mwStart > timeout){
+      if(mwFailed(st, now, timeout)){
         #ifdef WM_DEBUG_LEVEL
         DEBUG_WM(WM_DEBUG_VERBOSE,F("[MW] failed:"),(String)ssid + " " + getWLStatusString(st));
         #endif

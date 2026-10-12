@@ -866,6 +866,8 @@ protected:
     bool          _mwAutoRe       = true;  // sdk auto reconnect to restore after a run
     bool          _mwPersist      = false; // last store succeeded, list may be freed while idle
     uint8_t       _mwState        = MW_IDLE;
+    uint8_t       _mwStartSt      = 0;     // wifi status right after the attempt began (may be left from the one before)
+    uint8_t       _mwScanFails    = 0;     // scan start failed, retrying
     uint8_t       _mwCand         = 0;     // next candidate index
     int8_t        _mwTarget       = -1;    // credential index being tried
     int8_t        _mwFastIdx      = -1;    // last good tried in fast step
@@ -899,6 +901,8 @@ protected:
     void          mwRunStart();
     void          mwAbort();
     void          mwAttempt(int idx, const WiFiManagerCandidate* c);
+    bool          mwNoAp(uint8_t st, unsigned long now);
+    bool          mwFailed(uint8_t st, unsigned long now, uint32_t timeout);
     void          mwFinish(bool connected);
     bool          mwScanStart();
     int           mwScanCollect(std::vector<WiFiManagerScanItem> &items);
